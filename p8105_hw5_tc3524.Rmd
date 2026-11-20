@@ -1,0 +1,193 @@
+---
+title: "p8105_hw5_tc3524"
+author: "Hubert Chang"
+date: "2026-11-20"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  fig.width = 8,
+  fig.asp = 0.8,
+  out.width = "90%"
+)
+library(tidyverse)
+
+set.seed(1)
+```
+
+#Problem 1
+```{r}
+birthday_sim = function(n) {
+  birthdays = sample(1:365, size = n, replace = TRUE)
+  any(duplicated(birthdays))
+}
+```
+
+
+```{r}
+birthday_df = 
+  expand_grid(
+    group_size = 2:50,
+    iter = 1:10000
+  ) |>
+  mutate(shared_df = map_lgl(group_size, birthday_sim)) |>
+  group_by(group_size) |>
+  summarize(probability = mean(shared_df))
+```
+
+## Plotting
+```{r}
+birthday_df |>
+  ggplot(aes(x = group_size, y = probability)) +
+  geom_point() +
+  geom_line() +
+  labs (
+    title = "Probability of shared birthday by group size",
+    x = "group size",
+    y = "probability of shared b-day"
+  )
+```
+
+At around a group size of 23 people there is about a 50% chance that there are people who share the same birthday and by around 50 people there is about a 95% chance. 
+
+
+#Problem 2
+
+```{r}
+research_df = 
+  tibble(files = list.files("data/"),
+         path = str_c("data/", files)
+  ) |>
+  mutate(data = map(path, read_csv)) |>
+  unnest()
+```
+##cleaning
+```{r}
+research_clean = 
+  research_df |>
+  mutate(
+    files = str_replace(files, ".csv", ""),
+    files = str_replace(files, "^con", "Control"),
+    files = str_replace(files, "^exp", "Experimental")
+    ) |>
+  separate(
+    files, into = c("arm", "subject_id", sep = "_")
+  ) |>
+  pivot_longer(
+    cols = starts_with ("week_"),
+    names_to = "week",
+    names_prefix = "week_",
+    values_to = "outcome"
+  ) |>
+  mutate(week = as.numeric(week),
+         subject_id = as.numeric(subject_id)
+         )
+```
+##Plotting
+
+```{r}
+research_clean |>
+  ggplot(aes(x = week, y = outcome, color = arm, group = subject_id, color = arm)) +
+  geom_point() +
+  geom_path() +
+  facet_grid(~arm) +
+  labs(
+    title = "Longtudinal Observational by Study Arm",
+    x = "week",
+    y = "observations"
+  )
+  
+```
+The plot shows the longitudinal observation of subject over 8 weeks. In control, subjects stayed around the same aas the start, but in experimental arm, we saw the outcome increased slowly over time when compared from the start to end.
+
+#Problem 3
+
+```{r}
+t_test = function(mu, n = 30, sigma = 5) {
+  rnorm(n, mean = mu, sd = sigma) |>
+    t.test(mu = 0) |>
+    broom::tidy() 
+}
+```
+
+```{r}
+test_sim = 
+  expand_grid(
+    mu = 0:6,
+    iter = 1:5000
+  ) |>
+  mutate(
+    results = map(mu, t_test)
+  ) |>
+  unnest(results)
+```
+
+```{r}
+sim_result =
+  test_sim |>
+  group_by(mu) |>
+  summarize(
+    power = mean(p.value < 0.05),
+    avg_estimate = mean(estimate),
+    avg_estimate_rejected = mean(estimate[p.value < 0.05])
+  )
+```
+
+##plotting
+```{r}
+sim_result |>
+  ggplot(aes(x = mu, y = power)) +
+  geom_point() +
+  geom_line() +
+  labs(
+    title = "Statistical Power of True Pop. mean",
+    x = "True Population Mean",
+    y = "Statistical Power"
+  )
+```
+In this plot, we can see that as the true population mean increases (effect size) then power would increase as well. 
+
+## average stimate vs true mean
+
+```{r}
+sim_mean =
+  sim_result |>
+  pivot_longer(
+    c(avg_estimate, avg_estimate_rejected),
+    names_to = "estimate_type",
+    values_to = "avg_est"
+  ) |>
+  mutate(
+    estimate_type = if_else(
+      str_detect(estimate_type, "rejected"),
+      "Samples where null was rejected",
+      "All samples"
+    )
+  )
+```
+
+
+```{r}
+sim_mean|>
+  ggplot(aes(x = mu, y = avg_est, color = estimate_type)) +
+  geom_point() +
+  geom_line() +
+  labs(
+    title = "average estimate of mu by true mean",
+    x = "value of mu",
+    y = "average estimate of mu"
+  )
+```
+
+The sample average of mu across the tests when null is rejected is not approximately equal to the true value of mu. The average estimate among only the samples where the null was rejected is not approximately equal to the true effect for small effect size. However, around when mu equal 4+, we can see the lines overlap!
+
+
+
+
+
+
+
+
+
+
